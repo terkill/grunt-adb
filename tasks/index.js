@@ -5,7 +5,9 @@
  */
 
 module.exports = function(grunt) {
-    var terminal = require("child_process").exec;
+    var cp = require("child_process");
+    var terminal = cp.exec;
+    var spawn = cp.spawn;
 
     var run = function(command, callback) {
         terminal(command, function(error, stdout, stderr) {
@@ -55,6 +57,10 @@ module.exports = function(grunt) {
             this.data.activity = '/' + this.data.activity;
         }
 
+        if (!this.data.runner) {
+            this.data.runner = 'android.test.InstrumentationTestRunner';
+        }
+
 
         // UNINSTALL
         if (this.data.uninstall) {
@@ -74,6 +80,39 @@ module.exports = function(grunt) {
         if (this.data.launch) {
             run('adb ' + this.data.device + ' shell am start ' + this.data.wait  + this.data.debug + this.data.action + ' ' + this.data.launch + this.data.activity, function(error){
                 done(error);
+            });
+        }
+        //
+        // AM INSTRUMENT
+        if (this.data.instrument) {
+            if (this.data.wait === ' -W ') {
+                this.data.wait = '-w';
+            }
+
+            var args = [
+                this.data.device.trim(),
+                'shell',
+                'am',
+                'instrument',
+                this.data.wait.trim(),
+                this.data.instrument + '/' + this.data.runner]
+            grunt.log.write(args);
+            var adb = spawn('adb', args);
+
+            var exitCode = 0;
+            adb.stdout.on('data', function (data) {
+                data = data.toString();
+                grunt.log.write(data);
+                if (data.indexOf('FAILURES!!!') >= 0) {
+                    exitCode = 1;
+                }
+            });
+            adb.stderr.on('data', function (data) {
+                data = data.toString();
+                grunt.log.error(data);
+            });
+            adb.on('exit', function (code) {
+                done(code === 0 && exitCode === 0);
             });
         }
     });
